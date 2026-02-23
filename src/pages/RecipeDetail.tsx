@@ -14,13 +14,21 @@ const RecipeDetail = () => {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     if (id) {
       setLoading(true);
-      getRecipeDetail(Number(id)).then((data) => {
-        setRecipe(data);
-        setLoading(false);
-      });
+      setError(null);
+      getRecipeDetail(Number(id))
+        .then((data) => {
+          setRecipe(data);
+        })
+        .catch(() => {
+          setError("Couldn't load this recipe. Please try again later.");
+          setRecipe(null);
+        })
+        .finally(() => setLoading(false));
     }
   }, [id]);
 
@@ -39,8 +47,9 @@ const RecipeDetail = () => {
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar />
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-muted-foreground">Recipe not found.</p>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+          <p className="text-muted-foreground">{error || "Recipe not found."}</p>
+          <Button variant="outline" onClick={() => navigate(-1)}>← Go Back</Button>
         </div>
       </div>
     );

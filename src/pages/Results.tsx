@@ -19,13 +19,21 @@ const Results = () => {
   const [activeFilter, setActiveFilter] = useState("All");
   const [visibleCount, setVisibleCount] = useState(8);
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     if (query) {
       setLoading(true);
-      searchRecipes(query, 12).then((data) => {
-        setRecipes(data);
-        setLoading(false);
-      });
+      setError(null);
+      searchRecipes(query, 6)
+        .then((data) => {
+          setRecipes(data);
+        })
+        .catch(() => {
+          setError("Oops! Couldn't reach the kitchen. Please check your connection and try again.");
+          setRecipes([]);
+        })
+        .finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
@@ -64,6 +72,13 @@ const Results = () => {
             <div className="flex justify-center py-20">
               <Loader2 className="w-10 h-10 animate-spin text-primary" />
             </div>
+          ) : error ? (
+            <div className="text-center py-20">
+              <SearchX className="w-20 h-20 text-muted-foreground mx-auto mb-4" />
+              <h2 className="font-display text-3xl text-primary mb-2">KITCHEN TROUBLE!</h2>
+              <p className="text-muted-foreground mb-6">{error}</p>
+              <Button variant="outline" onClick={() => navigate("/")}>TRY AGAIN</Button>
+            </div>
           ) : recipes.length === 0 ? (
             <div className="text-center py-20">
               <SearchX className="w-20 h-20 text-muted-foreground mx-auto mb-4" />
@@ -71,7 +86,7 @@ const Results = () => {
               <p className="text-muted-foreground mb-6">Looks like we couldn't find recipes with those ingredients.</p>
               <div className="flex justify-center gap-3">
                 <Button variant="outline" onClick={() => navigate("/")}>TRY DIFFERENT INGREDIENTS</Button>
-                <Button onClick={() => { searchRecipes("potato", 12).then(setRecipes); }}>BROWSE ALL RECIPES</Button>
+                <Button onClick={() => { searchRecipes("potato", 6).then(setRecipes).catch(() => setError("Couldn't fetch recipes.")); }}>BROWSE ALL RECIPES</Button>
               </div>
             </div>
           ) : (
