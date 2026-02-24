@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -8,30 +8,47 @@ import { User, ThumbsUp } from "lucide-react";
 const cuisineOptions = ["North Indian", "South Indian", "Street Food", "Indo-Chinese", "Healthy Fits", "Desserts"];
 
 const Profile = () => {
-  const { savedRecipes, pantryItems, spiceLevel, setSpiceLevel, cuisineMoods, setCuisineMoods, dietaryPreferences, setDietaryPreferences } = useApp();
+  const { savedRecipes, pantryItems, profile, saveProfile } = useApp();
   const [showModal, setShowModal] = useState(false);
 
-  const [vegToggle, setVegToggle] = useState(dietaryPreferences.includes("vegetarian"));
-  const [nonVegToggle, setNonVegToggle] = useState(dietaryPreferences.includes("non-veg"));
-  const [veganToggle, setVeganToggle] = useState(dietaryPreferences.includes("vegan"));
-  const [gfToggle, setGfToggle] = useState(dietaryPreferences.includes("gluten-free"));
+  const [vegToggle, setVegToggle] = useState(false);
+  const [nonVegToggle, setNonVegToggle] = useState(true);
+  const [veganToggle, setVeganToggle] = useState(false);
+  const [gfToggle, setGfToggle] = useState(false);
+  const [spiceLevel, setSpiceLevel] = useState(3);
+  const [cuisineMoods, setCuisineMoods] = useState<string[]>([]);
+
+  useEffect(() => {
+  if (profile) {
+    setVegToggle(profile.is_vegetarian);
+    setNonVegToggle(profile.is_non_vegetarian);
+    setVeganToggle(profile.is_vegan);
+    setGfToggle(profile.is_gluten_free);
+    setSpiceLevel(profile.spice_level);
+    setCuisineMoods(profile.cuisine_moods || []);
+  }
+  }, [profile]);
 
   const toggleCuisine = (mood: string) => {
-    const updated = cuisineMoods.includes(mood)
+    const updated = (cuisineMoods || []).includes(mood)
       ? cuisineMoods.filter((m: string) => m !== mood)
-      : [...cuisineMoods, mood];
+      : [...(cuisineMoods || []), mood];
     setCuisineMoods(updated);
-  };
+};
 
-  const handleSave = () => {
-    const prefs: string[] = [];
-    if (vegToggle) prefs.push("vegetarian");
-    if (nonVegToggle) prefs.push("non-veg");
-    if (veganToggle) prefs.push("vegan");
-    if (gfToggle) prefs.push("gluten-free");
-    setDietaryPreferences(prefs);
+  const handleSave = async () => {
+    await saveProfile({
+      username: profile?.username || "Chef Foodie",
+      handle: profile?.handle || "@cheffoodie",
+      is_vegetarian: vegToggle,
+      is_non_vegetarian: nonVegToggle,
+      is_vegan: veganToggle,
+      is_gluten_free: gfToggle,
+      spice_level: spiceLevel,
+      cuisine_moods: cuisineMoods || [],
+    });
     setShowModal(true);
-  };
+};
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -111,7 +128,7 @@ const Profile = () => {
                   key={mood}
                   onClick={() => toggleCuisine(mood)}
                   className={`font-bold text-sm px-4 py-2 rounded-full border-2 transition-colors ${
-                    cuisineMoods.includes(mood)
+                    (cuisineMoods || []).includes(mood)
                       ? "bg-secondary text-secondary-foreground border-secondary"
                       : "border-border hover:border-primary"
                   }`}

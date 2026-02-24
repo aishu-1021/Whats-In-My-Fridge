@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect} from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -12,10 +12,27 @@ const defaultStaples = [
 ];
 
 const Pantry = () => {
-  const { pantryItems, setPantryItems } = useApp();
-  const [selected, setSelected] = useState<string[]>(pantryItems);
+  const { pantryItems, savePantryToDB } = useApp();
+  const [selected, setSelected] = useState<string[]>([]);
   const [customItem, setCustomItem] = useState("");
   const [allItems, setAllItems] = useState(defaultStaples);
+
+  //Sync with database when pantryItems loads
+  useEffect(() => {
+      if (pantryItems.length > 0) {
+          setSelected(pantryItems);
+          //Add any custom items from DB that aren't in defaultStaples
+          const customFromDB = pantryItems.filter(
+              (item) => !defaultStaples.map((s) => s.toLowerCase()).includes(item.toLowerCase())
+          );
+      if (customFromDB.length > 0) {
+          setAllItems((prev) => [
+              ...prev,
+              ...customFromDB.map((i) => i.charAt(0).toUpperCase() + i.slice(1))
+          ]);
+      }
+      }
+  }, [pantryItems]);
   const navigate = useNavigate();
 
   const toggleItem = (item: string) => {
@@ -32,8 +49,8 @@ const Pantry = () => {
     }
   };
 
-  const handleSave = () => {
-    setPantryItems(selected);
+  const handleSave = async () => {
+    await savePantryToDB(selected);
     navigate("/preferences");
   };
 

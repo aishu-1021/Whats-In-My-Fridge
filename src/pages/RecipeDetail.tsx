@@ -177,7 +177,7 @@ const RecipeDetail = () => {
                 </a>
               )}
 
-              {recipe.missedIngredients.length > 0 && (
+              {recipe.missedIngredients && recipe.missedIngredients.length > 0 && (
                 <div className="mt-6">
                   <Button
                     variant="hero"
