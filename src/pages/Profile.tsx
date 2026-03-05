@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,21 @@ import { User, ThumbsUp } from "lucide-react";
 const cuisineOptions = ["North Indian", "South Indian", "Street Food", "Indo-Chinese", "Healthy Fits", "Desserts"];
 
 const Profile = () => {
-  const { savedRecipes, pantryItems, profile, saveProfile } = useApp();
+  const { savedRecipes, pantryItems, profile, saveProfile, user, logout, token} = useApp();
+  const navigate = useNavigate();
+  const handleDeleteAccount = async () => {
+  if (!window.confirm("Are you sure? This will permanently delete your account and all your data.")) return;
+  try {
+    await fetch("http://localhost:5000/auth/delete-account", {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    logout();
+    navigate("/");
+  } catch (err) {
+    alert("Failed to delete account. Please try again.");
+  }
+};
   const [showModal, setShowModal] = useState(false);
 
   const [vegToggle, setVegToggle] = useState(false);
@@ -60,8 +75,8 @@ const Profile = () => {
             <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
               <User className="w-12 h-12 text-primary" />
             </div>
-            <h2 className="font-display text-2xl">Chef Foodie</h2>
-            <p className="text-muted-foreground text-sm">@cheffoodie</p>
+            <h2 className="font-display text-2xl">{profile?.username || user?.username}</h2>
+            <p className="text-muted-foreground text-sm">{profile?.handle || "@cheffoodie"}</p>
             <button className="text-primary font-bold text-sm mt-1 hover:underline">EDIT PROFILE</button>
           </div>
 
@@ -140,7 +155,10 @@ const Profile = () => {
           </div>
 
           <Button variant="hero" className="w-full" onClick={handleSave}>
-            SAVE CHANGES →
+          SAVE CHANGES →
+          </Button>
+          <Button variant="outline" className="w-full mt-3 border-2 border-red-300 text-red-500 hover:bg-red-50 rounded-full font-bold" onClick={handleDeleteAccount}>
+          DELETE MY ACCOUNT
           </Button>
         </div>
       </main>

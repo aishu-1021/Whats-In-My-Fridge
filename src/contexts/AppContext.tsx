@@ -21,7 +21,7 @@ export interface Recipe {
 }
 
 export interface BazaarItem {
-  id?: number;       // id from database
+  id?: number;
   name: string;
   bought: boolean;
 }
@@ -37,7 +37,19 @@ export interface UserProfile {
   cuisine_moods: string[];
 }
 
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+}
+
 interface AppState {
+  user: User | null;
+  token: string | null;
+  isLoggedIn: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string) => Promise<void>;
+  logout: () => void;
   savedRecipes: Recipe[];
   bazaarList: BazaarItem[];
   pantryItems: string[];
@@ -46,32 +58,22 @@ interface AppState {
   allergies: string[];
   searchQuery: string;
   dbLoading: boolean;
-
-  // Recipe actions
   toggleSaveRecipe: (recipe: Recipe) => void;
   isRecipeSaved: (id: number) => boolean;
-
-  // Bazaar actions
   addToBazaar: (ingredients: any[]) => void;
   toggleBazaarItem: (item: BazaarItem) => void;
   removeBazaarItem: (item: BazaarItem) => void;
   addBazaarItem: (name: string) => void;
-
-  // Pantry actions
   setPantryItems: (items: string[]) => void;
   savePantryToDB: (items: string[]) => Promise<void>;
-
-  // Profile actions
   saveProfile: (profileData: UserProfile) => Promise<void>;
-
-  // Other
   setDietaryPreferences: (prefs: string[]) => void;
   setAllergies: (allergies: string[]) => void;
   setSearchQuery: (query: string) => void;
 }
 
 // -------------------------------------------------------
-// DEFAULT PROFILE
+// DEFAULTS
 // -------------------------------------------------------
 
 const defaultProfile: UserProfile = {
@@ -85,13 +87,19 @@ const defaultProfile: UserProfile = {
   cuisine_moods: [],
 };
 
-// -------------------------------------------------------
-// CONTEXT
-// -------------------------------------------------------
-
 const AppContext = createContext<AppState | undefined>(undefined);
 
+// -------------------------------------------------------
+// PROVIDER
+// -------------------------------------------------------
+
 export const AppProvider = ({ children }: { children: ReactNode }) => {
+  // Auth state — persisted in localStorage to survive page reloads
+  const [user, setUser] = useState<User | null>(() => {
+    try { return JSON.parse(localStorage.getItem("user") || "null"); } catch { return null; }
+  });
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
+
   const [savedRecipes, setSavedRecipes] = useState<Recipe[]>([]);
   const [bazaarList, setBazaarList] = useState<BazaarItem[]>([]);
   const [pantryItems, setPantryItems] = useState<string[]>([]);
@@ -99,84 +107,126 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [dietaryPreferences, setDietaryPreferences] = useState<string[]>([]);
   const [allergies, setAllergies] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [dbLoading, setDbLoading] = useState(true);
+  const [dbLoading, setDbLoading] = useState(false);
+
+  const isLoggedIn = !!user && !!token;
 
   // -------------------------------------------------------
-  // LOAD ALL DATA FROM DATABASE ON APP START
+  // AUTH HELPER
   // -------------------------------------------------------
 
-  useEffect(() => {
-    const loadAllData = async () => {
-      try {
-        // Load all four data sources in parallel
-        const [pantryRes, profileRes, savedRes, bazaarRes] = await Promise.all([
-          fetch(`${API_BASE}/pantry`),
-          fetch(`${API_BASE}/profile`),
-          fetch(`${API_BASE}/saved`),
-          fetch(`${API_BASE}/bazaar`),
-        ]);
+  const authHeaders = (tok: string) => ({
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${tok}`,
+  });
 
-        if (pantryRes.ok) {
-          const pantryData = await pantryRes.json();
-          setPantryItems(pantryData);
-        }
+  // -------------------------------------------------------
+  // LOAD USER DATA
+  // -------------------------------------------------------
 
-        if (profileRes.ok) {
-          const profileData = await profileRes.json();
-          setProfile(profileData);
-        }
+  const loadUserData = async (tok: string) => {
+    setDbLoading(true);
+    try {
+      const [pantryRes, profileRes, savedRes, bazaarRes] = await Promise.all([
+        fetch(`${API_BASE}/pantry`, { headers: authHeaders(tok) }),
+        fetch(`${API_BASE}/profile`, { headers: authHeaders(tok) }),
+        fetch(`${API_BASE}/saved`, { headers: authHeaders(tok) }),
+        fetch(`${API_BASE}/bazaar`, { headers: authHeaders(tok) }),
+      ]);
 
-        if (savedRes.ok) {
-          const savedData = await savedRes.json();
-          setSavedRecipes(savedData);
-        }
-
-        if (bazaarRes.ok) {
-          const bazaarData = await bazaarRes.json();
-          // Map database format to app format
-          setBazaarList(bazaarData.map((item: any) => ({
-            id: item.id,
-            name: item.ingredient,
-            bought: item.is_bought,
-          })));
-        }
-      } catch (err) {
-        console.error("Could not connect to database:", err);
-        // App still works with empty state if DB is unavailable
-      } finally {
-        setDbLoading(false);
+      if (pantryRes.ok) setPantryItems(await pantryRes.json());
+      if (profileRes.ok) setProfile(await profileRes.json());
+      if (savedRes.ok) setSavedRecipes(await savedRes.json());
+      if (bazaarRes.ok) {
+        const bazaarData = await bazaarRes.json();
+        setBazaarList(bazaarData.map((item: any) => ({
+          id: item.id,
+          name: item.ingredient,
+          bought: item.is_bought,
+        })));
       }
-    };
+    } catch (err) {
+      console.error("Failed to load user data:", err);
+    } finally {
+      setDbLoading(false);
+    }
+  };
 
-    loadAllData();
+  // Re-load user data on page refresh if token exists
+  useEffect(() => {
+    if (token && user) loadUserData(token);
   }, []);
 
   // -------------------------------------------------------
-  // SAVED RECIPES — synced with database
+  // CLEAR USER DATA
+  // -------------------------------------------------------
+
+  const clearUserData = () => {
+    setSavedRecipes([]);
+    setBazaarList([]);
+    setPantryItems([]);
+    setProfile(defaultProfile);
+  };
+
+  // -------------------------------------------------------
+  // AUTH ACTIONS
+  // -------------------------------------------------------
+
+  const login = async (email: string, password: string) => {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Login failed");
+
+    setUser(data.user);
+    setToken(data.token);
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("user", JSON.stringify(data.user));
+    await loadUserData(data.token);
+  };
+
+  const register = async (username: string, email: string, password: string) => {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Registration failed");
+
+    setUser(data.user);
+    setToken(data.token);
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("user", JSON.stringify(data.user));
+  };
+
+  const logout = () => {
+    setUser(null);
+    setToken(null);
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    clearUserData();
+  };
+
+  // -------------------------------------------------------
+  // SAVED RECIPES
   // -------------------------------------------------------
 
   const toggleSaveRecipe = async (recipe: Recipe) => {
+    if (!token) return;
     const alreadySaved = savedRecipes.some((r) => r.id === recipe.id);
-
     if (alreadySaved) {
-      // Remove from DB
       try {
-        await fetch(`${API_BASE}/saved/${recipe.id}`, { method: "DELETE" });
-      } catch (err) {
-        console.error("Failed to unsave recipe:", err);
-      }
+        await fetch(`${API_BASE}/saved/${recipe.id}`, { method: "DELETE", headers: authHeaders(token) });
+      } catch (err) { console.error(err); }
       setSavedRecipes((prev) => prev.filter((r) => r.id !== recipe.id));
     } else {
-      // Save to DB
       try {
-        await fetch(`${API_BASE}/saved`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(recipe),
-        });
-      } catch (err) {
-        console.error("Failed to save recipe:", err);
-      }
+        await fetch(`${API_BASE}/saved`, { method: "POST", headers: authHeaders(token), body: JSON.stringify(recipe) });
+      } catch (err) { console.error(err); }
       setSavedRecipes((prev) => [...prev, recipe]);
     }
   };
@@ -184,27 +234,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const isRecipeSaved = (id: number) => savedRecipes.some((r) => r.id === id);
 
   // -------------------------------------------------------
-  // BAZAAR LIST — synced with database
+  // BAZAAR
   // -------------------------------------------------------
 
   const addToBazaar = async (ingredients: any[]) => {
+    if (!token) return;
     try {
       await fetch(`${API_BASE}/bazaar`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(token),
         body: JSON.stringify({ ingredients }),
       });
-      // Reload bazaar from DB to get fresh IDs
-      const res = await fetch(`${API_BASE}/bazaar`);
+      const res = await fetch(`${API_BASE}/bazaar`, { headers: authHeaders(token) });
       const data = await res.json();
-      setBazaarList(data.map((item: any) => ({
-        id: item.id,
-        name: item.ingredient,
-        bought: item.is_bought,
-      })));
+      setBazaarList(data.map((item: any) => ({ id: item.id, name: item.ingredient, bought: item.is_bought })));
     } catch (err) {
-      console.error("Failed to add to bazaar:", err);
-      // Fallback: add to local state only
+      console.error(err);
       const newItems = ingredients
         .map((i) => ({ name: typeof i === "string" ? i : i.name, bought: false }))
         .filter((i) => !bazaarList.find((b) => b.name.toLowerCase() === i.name.toLowerCase()));
@@ -213,84 +258,70 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const toggleBazaarItem = async (item: BazaarItem) => {
-    if (item.id) {
+    if (item.id && token) {
       try {
-        await fetch(`${API_BASE}/bazaar/${item.id}`, { method: "PATCH" });
-      } catch (err) {
-        console.error("Failed to toggle bazaar item:", err);
-      }
+        await fetch(`${API_BASE}/bazaar/${item.id}`, { method: "PATCH", headers: authHeaders(token) });
+      } catch (err) { console.error(err); }
     }
-    setBazaarList((prev) =>
-      prev.map((i) => (i.name === item.name ? { ...i, bought: !i.bought } : i))
-    );
+    setBazaarList((prev) => prev.map((i) => (i.name === item.name ? { ...i, bought: !i.bought } : i)));
   };
 
   const removeBazaarItem = async (item: BazaarItem) => {
-    if (item.id) {
+    if (item.id && token) {
       try {
-        await fetch(`${API_BASE}/bazaar/${item.id}`, { method: "DELETE" });
-      } catch (err) {
-        console.error("Failed to remove bazaar item:", err);
-      }
+        await fetch(`${API_BASE}/bazaar/${item.id}`, { method: "DELETE", headers: authHeaders(token) });
+      } catch (err) { console.error(err); }
     }
     setBazaarList((prev) => prev.filter((i) => i.name !== item.name));
   };
 
   const addBazaarItem = async (name: string) => {
-    if (!name.trim()) return;
+    if (!name.trim() || !token) return;
     if (bazaarList.find((i) => i.name.toLowerCase() === name.toLowerCase())) return;
-
     try {
       await fetch(`${API_BASE}/bazaar`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(token),
         body: JSON.stringify({ ingredients: [name.trim()] }),
       });
-      const res = await fetch(`${API_BASE}/bazaar`);
+      const res = await fetch(`${API_BASE}/bazaar`, { headers: authHeaders(token) });
       const data = await res.json();
-      setBazaarList(data.map((item: any) => ({
-        id: item.id,
-        name: item.ingredient,
-        bought: item.is_bought,
-      })));
+      setBazaarList(data.map((item: any) => ({ id: item.id, name: item.ingredient, bought: item.is_bought })));
     } catch (err) {
-      console.error("Failed to add bazaar item:", err);
       setBazaarList((prev) => [...prev, { name: name.trim(), bought: false }]);
     }
   };
 
   // -------------------------------------------------------
-  // PANTRY — synced with database
+  // PANTRY
   // -------------------------------------------------------
 
   const savePantryToDB = async (items: string[]) => {
     setPantryItems(items);
+    if (!token) return;
     try {
       await fetch(`${API_BASE}/pantry`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(token),
         body: JSON.stringify({ ingredients: items }),
       });
-    } catch (err) {
-      console.error("Failed to save pantry:", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   // -------------------------------------------------------
-  // PROFILE — synced with database
+  // PROFILE
   // -------------------------------------------------------
 
   const saveProfile = async (profileData: UserProfile) => {
     setProfile(profileData);
+    if (!token) return;
     try {
       await fetch(`${API_BASE}/profile`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(token),
         body: JSON.stringify(profileData),
       });
-    } catch (err) {
-      console.error("Failed to save profile:", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   // -------------------------------------------------------
@@ -298,17 +329,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   // -------------------------------------------------------
 
   return (
-    <AppContext.Provider
-      value={{
-        savedRecipes, bazaarList, pantryItems, profile,
-        dietaryPreferences, allergies, searchQuery, dbLoading,
-        toggleSaveRecipe, isRecipeSaved,
-        addToBazaar, toggleBazaarItem, removeBazaarItem, addBazaarItem,
-        setPantryItems, savePantryToDB,
-        saveProfile,
-        setDietaryPreferences, setAllergies, setSearchQuery,
-      }}
-    >
+    <AppContext.Provider value={{
+      user, token, isLoggedIn, login, register, logout,
+      savedRecipes, bazaarList, pantryItems, profile,
+      dietaryPreferences, allergies, searchQuery, dbLoading,
+      toggleSaveRecipe, isRecipeSaved,
+      addToBazaar, toggleBazaarItem, removeBazaarItem, addBazaarItem,
+      setPantryItems, savePantryToDB,
+      saveProfile,
+      setDietaryPreferences, setAllergies, setSearchQuery,
+    }}>
       {children}
     </AppContext.Provider>
   );
