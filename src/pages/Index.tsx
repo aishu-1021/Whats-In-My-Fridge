@@ -6,7 +6,8 @@ import Footer from "@/components/Footer";
 import { useApp } from "@/contexts/AppContext";
 import {
   Search, Flame, Coffee, Soup,
-  Refrigerator, ChefHat, Star, ArrowRight
+  Refrigerator, ChefHat, Star, ArrowRight,
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -71,6 +72,7 @@ const stats = [
   { target: 0,     suffix: "",  label: "Food Wasted" },
 ];
 
+// ── Extended testimonials (more cards = better carousel feel) ──────────────
 const testimonials = [
   {
     name: "Priya S.",
@@ -88,6 +90,18 @@ const testimonials = [
     name: "Meera T.",
     location: "Delhi",
     text: "Found a Boiled Egg Curry recipe with only 3 ingredients I had at home. My family thought I'd ordered from a restaurant!",
+    rating: 5,
+  },
+  {
+    name: "Arjun P.",
+    location: "Chennai",
+    text: "As a hostel student with barely anything in the kitchen, this app is a lifesaver. Made dosa with just rice flour and curd!",
+    rating: 5,
+  },
+  {
+    name: "Sneha R.",
+    location: "Pune",
+    text: "My kids are picky eaters but every recipe this app suggested was a hit. The spice level filter is brilliant.",
     rating: 5,
   },
 ];
@@ -156,6 +170,166 @@ function useInView(threshold = 0.2) {
   return { ref, visible };
 }
 
+// ─── Testimonial Carousel ─────────────────────────────────────────────────────
+
+function TestimonialCarousel() {
+  const [active, setActive]   = useState(0);
+  const [paused, setPaused]   = useState(false);
+  const [animDir, setAnimDir] = useState<"left" | "right">("right");
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const total = testimonials.length;
+
+  const goTo = (idx: number, dir: "left" | "right") => {
+    setAnimDir(dir);
+    setActive((idx + total) % total);
+  };
+
+  const prev = () => goTo(active - 1, "left");
+  const next = () => goTo(active + 1, "right");
+
+  // Auto-advance every 3.5 s, pause on hover
+  useEffect(() => {
+    if (paused) return;
+    timerRef.current = setTimeout(() => goTo(active + 1, "right"), 3500);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [active, paused]);
+
+  // Visible indices: prev, active, next (3-up on desktop)
+  const indices = [
+    (active - 1 + total) % total,
+    active,
+    (active + 1) % total,
+  ];
+
+  return (
+    <div
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      {/* Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {indices.map((idx, pos) => {
+          const t = testimonials[idx];
+          const isCenter = pos === 1;
+          return (
+            <div
+              key={`${idx}-${pos}`}
+              className="testi-card bg-card border-2 border-border rounded-2xl p-6"
+              style={{
+                transition: "opacity 0.4s ease, transform 0.4s ease",
+                opacity:   isCenter ? 1 : 0.55,
+                transform: isCenter ? "scale(1.03)" : "scale(0.97)",
+                boxShadow: isCenter ? "0 8px 32px rgba(0,0,0,0.10)" : "none",
+              }}
+            >
+              {/* Stars */}
+              <div className="flex gap-1 mb-4">
+                {Array.from({ length: t.rating }).map((_, j) => (
+                  <Star key={j} className="w-4 h-4 fill-saffron text-saffron" />
+                ))}
+              </div>
+              <p className="text-muted-foreground text-sm leading-relaxed mb-6 italic">
+                "{t.text}"
+              </p>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-display text-primary text-lg">
+                  {t.name[0]}
+                </div>
+                <div>
+                  <p className="font-bold text-sm">{t.name}</p>
+                  <p className="text-xs text-muted-foreground">{t.location}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Controls row */}
+      <div className="flex items-center justify-center gap-5">
+
+        {/* Prev button */}
+        <button
+          onClick={prev}
+          aria-label="Previous"
+          style={{
+            width: 38, height: 38, borderRadius: "50%",
+            border: "2px solid #E0D6C2",
+            background: "white",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer",
+            transition: "border-color 0.15s, background 0.15s",
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "hsl(var(--primary))";
+            (e.currentTarget as HTMLButtonElement).style.background = "hsl(var(--primary) / 0.06)";
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "#E0D6C2";
+            (e.currentTarget as HTMLButtonElement).style.background = "white";
+          }}
+        >
+          <ChevronLeft size={16} strokeWidth={2.5} style={{ color: "hsl(var(--primary))" }} />
+        </button>
+
+        {/* Dot indicators */}
+        <div className="flex gap-2">
+          {testimonials.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i, i > active ? "right" : "left")}
+              aria-label={`Go to testimonial ${i + 1}`}
+              style={{
+                width:  i === active ? 22 : 8,
+                height: 8,
+                borderRadius: 99,
+                border: "none",
+                background: i === active
+                  ? "hsl(var(--primary))"
+                  : "hsl(var(--primary) / 0.25)",
+                cursor: "pointer",
+                padding: 0,
+                transition: "width 0.3s ease, background 0.3s ease",
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Next button */}
+        <button
+          onClick={next}
+          aria-label="Next"
+          style={{
+            width: 38, height: 38, borderRadius: "50%",
+            border: "2px solid #E0D6C2",
+            background: "white",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer",
+            transition: "border-color 0.15s, background 0.15s",
+          }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "hsl(var(--primary))";
+            (e.currentTarget as HTMLButtonElement).style.background = "hsl(var(--primary) / 0.06)";
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLButtonElement).style.borderColor = "#E0D6C2";
+            (e.currentTarget as HTMLButtonElement).style.background = "white";
+          }}
+        >
+          <ChevronRight size={16} strokeWidth={2.5} style={{ color: "hsl(var(--primary))" }} />
+        </button>
+      </div>
+
+      {/* Pause indicator */}
+      {paused && (
+        <p className="text-center text-xs text-muted-foreground mt-3 tracking-wide">
+          Paused
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const Index = () => {
@@ -212,9 +386,9 @@ const Index = () => {
         .cat-card:hover { transform: translateY(-7px) scale(1.01); box-shadow: 0 16px 40px rgba(0,0,0,0.15); }
 
         .testi-card {
-          transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.22s ease;
+          transition: opacity 0.4s ease, transform 0.4s ease, box-shadow 0.4s ease;
         }
-        .testi-card:hover { transform: translateY(-5px); box-shadow: 0 12px 32px rgba(0,0,0,0.10); }
+        .testi-card:hover { box-shadow: 0 12px 32px rgba(0,0,0,0.10); }
 
         .hero-input:focus {
           border-color: hsl(var(--primary)) !important;
@@ -234,7 +408,6 @@ const Index = () => {
         <Navbar />
 
         {/* ── HERO ── */}
-        {/* CHANGE 1: Removed <FloatingEmojis /> from hero — no more floating food emojis */}
         <section className="sunburst-bg relative overflow-hidden py-20 md:py-32 flex-shrink-0">
           <div className="container mx-auto px-4 relative z-10 text-center">
             <div className="inline-block bg-primary text-primary-foreground text-xs font-bold px-4 py-2 rounded-full mb-6 tracking-widest">
@@ -327,64 +500,31 @@ const Index = () => {
                 From empty fridge to full plate in 3 simple steps.
               </p>
             </div>
-
-            {/* CHANGE 2: Replaced broken absolute-positioned connector lines with inline
-                ArrowRight icons sitting between cards in a flex row — no more stray lines */}
             <div className="flex flex-col md:flex-row items-stretch gap-0">
               {steps.map((step, i) => (
                 <div key={i} className="flex items-center flex-1 min-w-0">
-                  {/* Card */}
                   <div
-                    className={`
-                      step-card
-                      step-card-${stepsVisible ? "visible" : "hidden"}
-                      relative flex-1 bg-card border-2 border-border rounded-2xl p-8 overflow-hidden
-                    `}
+                    className={`step-card step-card-${stepsVisible ? "visible" : "hidden"} relative flex-1 bg-card border-2 border-border rounded-2xl p-8 overflow-hidden`}
                     style={{ animationDelay: `${i * 0.14}s` }}
                   >
-                    {/* Coloured top border */}
-                    <div style={{
-                      position: "absolute", top: 0, left: 0, right: 0,
-                      height: 4, background: step.accent, borderRadius: "14px 14px 0 0",
-                    }} />
-
-                    {/* Step number watermark */}
-                    <div
-                      className="step-number font-display absolute top-4 right-5 text-6xl select-none pointer-events-none"
-                      style={{ color: step.accent, lineHeight: 1 }}
-                    >
+                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 4, background: step.accent, borderRadius: "14px 14px 0 0" }} />
+                    <div className="step-number font-display absolute top-4 right-5 text-6xl select-none pointer-events-none" style={{ color: step.accent, lineHeight: 1 }}>
                       {step.step}
                     </div>
-
-                    {/* Icon */}
-                    <div
-                      className="step-icon-wrap w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
-                      style={{ background: step.lightBg }}
-                    >
+                    <div className="step-icon-wrap w-16 h-16 rounded-2xl flex items-center justify-center mb-6" style={{ background: step.lightBg }}>
                       {step.icon}
                     </div>
-
-                    {/* Text */}
-                    <h3 className="font-display text-lg mb-3" style={{ color: step.accent }}>
-                      {step.title}
-                    </h3>
+                    <h3 className="font-display text-lg mb-3" style={{ color: step.accent }}>{step.title}</h3>
                     <p className="text-muted-foreground text-sm leading-relaxed">{step.desc}</p>
                   </div>
-
-                  {/* Arrow connector between cards — only between, not after last */}
                   {i < steps.length - 1 && (
                     <div className="hidden md:flex items-center justify-center flex-shrink-0 px-3">
-                      <ArrowRight
-                        size={22}
-                        strokeWidth={1.5}
-                        style={{ color: step.accent, opacity: 0.4 }}
-                      />
+                      <ArrowRight size={22} strokeWidth={1.5} style={{ color: step.accent, opacity: 0.4 }} />
                     </div>
                   )}
                 </div>
               ))}
             </div>
-
             {!isLoggedIn && (
               <div className="text-center mt-12">
                 <Link to="/auth">
@@ -406,8 +546,7 @@ const Index = () => {
               {categories.map((cat, i) => {
                 const colors = ["bg-primary", "bg-saffron", "bg-accent"];
                 return (
-                  <div
-                    key={i}
+                  <div key={i}
                     className={`cat-card ${colors[i]} text-primary-foreground rounded-2xl p-8 text-center shadow-lg cursor-pointer`}
                     onClick={() => {
                       if (!isLoggedIn) { navigate("/auth"); return; }
@@ -420,9 +559,7 @@ const Index = () => {
                     <p className="text-sm opacity-90 mb-4">{cat.desc}</p>
                     <div className="flex justify-center gap-2 flex-wrap">
                       {cat.tags.map((tag) => (
-                        <span key={tag} className="bg-primary-foreground/20 text-xs font-bold px-3 py-1 rounded-full">
-                          {tag}
-                        </span>
+                        <span key={tag} className="bg-primary-foreground/20 text-xs font-bold px-3 py-1 rounded-full">{tag}</span>
                       ))}
                     </div>
                   </div>
@@ -432,39 +569,20 @@ const Index = () => {
           </div>
         </section>
 
-        {/* ── TESTIMONIALS ── */}
+        {/* ── TESTIMONIALS — auto-scroll carousel ── */}
+        {/* CHANGE: Replaced static 3-column grid with TestimonialCarousel component.
+            Auto-advances every 3.5s, pauses on hover, has prev/next buttons and dot indicators. */}
         <section className="py-20 bg-background" id="testimonials">
           <div className="container mx-auto px-4">
             <div className="text-center mb-14">
               <h2 className="font-display text-4xl md:text-5xl text-primary mb-3">WHAT CHEFS ARE SAYING</h2>
               <p className="text-muted-foreground max-w-md mx-auto">Real cooks. Real kitchens. Real delicious results.</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {testimonials.map((t, i) => (
-                <div key={i} className="testi-card bg-card border-2 border-border rounded-2xl p-6">
-                  <div className="flex gap-1 mb-4">
-                    {Array.from({ length: t.rating }).map((_, j) => (
-                      <Star key={j} className="w-4 h-4 fill-saffron text-saffron" />
-                    ))}
-                  </div>
-                  <p className="text-muted-foreground text-sm leading-relaxed mb-6 italic">"{t.text}"</p>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-display text-primary text-lg">
-                      {t.name[0]}
-                    </div>
-                    <div>
-                      <p className="font-bold text-sm">{t.name}</p>
-                      <p className="text-xs text-muted-foreground">{t.location}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <TestimonialCarousel />
           </div>
         </section>
 
         {/* ── FINAL CTA ── */}
-        {/* CHANGE 3: Removed <FloatingEmojis /> from CTA section too */}
         {!isLoggedIn && (
           <section className="py-20 sunburst-bg relative overflow-hidden">
             <div className="container mx-auto px-4 text-center relative z-10">
