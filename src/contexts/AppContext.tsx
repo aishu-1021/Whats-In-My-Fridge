@@ -29,6 +29,8 @@ export interface BazaarItem {
 export interface UserProfile {
   username: string;
   handle: string;
+  bio?: string;           // ← added
+  avatar?: string;        // ← added (base64 data URL or hosted URL)
   is_vegetarian: boolean;
   is_vegan: boolean;
   is_gluten_free: boolean;
@@ -79,6 +81,8 @@ interface AppState {
 const defaultProfile: UserProfile = {
   username: "Chef Foodie",
   handle: "@cheffoodie",
+  bio: "",
+  avatar: "",
   is_vegetarian: false,
   is_vegan: false,
   is_gluten_free: false,
@@ -94,26 +98,21 @@ const AppContext = createContext<AppState | undefined>(undefined);
 // -------------------------------------------------------
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  // Auth state — persisted in localStorage to survive page reloads
   const [user, setUser] = useState<User | null>(() => {
     try { return JSON.parse(localStorage.getItem("user") || "null"); } catch { return null; }
   });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
 
-  const [savedRecipes, setSavedRecipes] = useState<Recipe[]>([]);
-  const [bazaarList, setBazaarList] = useState<BazaarItem[]>([]);
-  const [pantryItems, setPantryItems] = useState<string[]>([]);
-  const [profile, setProfile] = useState<UserProfile>(defaultProfile);
-  const [dietaryPreferences, setDietaryPreferences] = useState<string[]>([]);
-  const [allergies, setAllergies] = useState<string[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [dbLoading, setDbLoading] = useState(false);
+  const [savedRecipes,        setSavedRecipes]        = useState<Recipe[]>([]);
+  const [bazaarList,          setBazaarList]           = useState<BazaarItem[]>([]);
+  const [pantryItems,         setPantryItems]          = useState<string[]>([]);
+  const [profile,             setProfile]              = useState<UserProfile>(defaultProfile);
+  const [dietaryPreferences,  setDietaryPreferences]   = useState<string[]>([]);
+  const [allergies,           setAllergies]            = useState<string[]>([]);
+  const [searchQuery,         setSearchQuery]          = useState("");
+  const [dbLoading,           setDbLoading]            = useState(false);
 
   const isLoggedIn = !!user && !!token;
-
-  // -------------------------------------------------------
-  // AUTH HELPER
-  // -------------------------------------------------------
 
   const authHeaders = (tok: string) => ({
     "Content-Type": "application/json",
@@ -128,15 +127,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setDbLoading(true);
     try {
       const [pantryRes, profileRes, savedRes, bazaarRes] = await Promise.all([
-        fetch(`${API_BASE}/pantry`, { headers: authHeaders(tok) }),
-        fetch(`${API_BASE}/profile`, { headers: authHeaders(tok) }),
-        fetch(`${API_BASE}/saved`, { headers: authHeaders(tok) }),
-        fetch(`${API_BASE}/bazaar`, { headers: authHeaders(tok) }),
+        fetch(`${API_BASE}/pantry`,   { headers: authHeaders(tok) }),
+        fetch(`${API_BASE}/profile`,  { headers: authHeaders(tok) }),
+        fetch(`${API_BASE}/saved`,    { headers: authHeaders(tok) }),
+        fetch(`${API_BASE}/bazaar`,   { headers: authHeaders(tok) }),
       ]);
 
-      if (pantryRes.ok) setPantryItems(await pantryRes.json());
+      if (pantryRes.ok)  setPantryItems(await pantryRes.json());
       if (profileRes.ok) setProfile(await profileRes.json());
-      if (savedRes.ok) setSavedRecipes(await savedRes.json());
+      if (savedRes.ok)   setSavedRecipes(await savedRes.json());
       if (bazaarRes.ok) {
         const bazaarData = await bazaarRes.json();
         setBazaarList(bazaarData.map((item: any) => ({
@@ -152,14 +151,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Re-load user data on page refresh if token exists
   useEffect(() => {
     if (token && user) loadUserData(token);
   }, []);
-
-  // -------------------------------------------------------
-  // CLEAR USER DATA
-  // -------------------------------------------------------
 
   const clearUserData = () => {
     setSavedRecipes([]);
@@ -169,7 +163,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // -------------------------------------------------------
-  // AUTH ACTIONS
+  // AUTH
   // -------------------------------------------------------
 
   const login = async (email: string, password: string) => {
@@ -180,7 +174,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Login failed");
-
     setUser(data.user);
     setToken(data.token);
     localStorage.setItem("token", data.token);
@@ -196,7 +189,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Registration failed");
-
     setUser(data.user);
     setToken(data.token);
     localStorage.setItem("token", data.token);
@@ -219,14 +211,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (!token) return;
     const alreadySaved = savedRecipes.some((r) => r.id === recipe.id);
     if (alreadySaved) {
-      try {
-        await fetch(`${API_BASE}/saved/${recipe.id}`, { method: "DELETE", headers: authHeaders(token) });
-      } catch (err) { console.error(err); }
+      try { await fetch(`${API_BASE}/saved/${recipe.id}`, { method: "DELETE", headers: authHeaders(token) }); }
+      catch (err) { console.error(err); }
       setSavedRecipes((prev) => prev.filter((r) => r.id !== recipe.id));
     } else {
-      try {
-        await fetch(`${API_BASE}/saved`, { method: "POST", headers: authHeaders(token), body: JSON.stringify(recipe) });
-      } catch (err) { console.error(err); }
+      try { await fetch(`${API_BASE}/saved`, { method: "POST", headers: authHeaders(token), body: JSON.stringify(recipe) }); }
+      catch (err) { console.error(err); }
       setSavedRecipes((prev) => [...prev, recipe]);
     }
   };
@@ -249,7 +239,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const data = await res.json();
       setBazaarList(data.map((item: any) => ({ id: item.id, name: item.ingredient, bought: item.is_bought })));
     } catch (err) {
-      console.error(err);
       const newItems = ingredients
         .map((i) => ({ name: typeof i === "string" ? i : i.name, bought: false }))
         .filter((i) => !bazaarList.find((b) => b.name.toLowerCase() === i.name.toLowerCase()));
@@ -259,18 +248,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const toggleBazaarItem = async (item: BazaarItem) => {
     if (item.id && token) {
-      try {
-        await fetch(`${API_BASE}/bazaar/${item.id}`, { method: "PATCH", headers: authHeaders(token) });
-      } catch (err) { console.error(err); }
+      try { await fetch(`${API_BASE}/bazaar/${item.id}`, { method: "PATCH", headers: authHeaders(token) }); }
+      catch (err) { console.error(err); }
     }
     setBazaarList((prev) => prev.map((i) => (i.name === item.name ? { ...i, bought: !i.bought } : i)));
   };
 
   const removeBazaarItem = async (item: BazaarItem) => {
     if (item.id && token) {
-      try {
-        await fetch(`${API_BASE}/bazaar/${item.id}`, { method: "DELETE", headers: authHeaders(token) });
-      } catch (err) { console.error(err); }
+      try { await fetch(`${API_BASE}/bazaar/${item.id}`, { method: "DELETE", headers: authHeaders(token) }); }
+      catch (err) { console.error(err); }
     }
     setBazaarList((prev) => prev.filter((i) => i.name !== item.name));
   };
@@ -325,7 +312,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // -------------------------------------------------------
-  // PROVIDER
+  // CONTEXT VALUE
   // -------------------------------------------------------
 
   return (
