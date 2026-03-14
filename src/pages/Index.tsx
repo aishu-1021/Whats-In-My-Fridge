@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import FloatingEmojis from "@/components/FloatingEmojis"; // ← CHANGE 1: re-added import
 import { useApp } from "@/contexts/AppContext";
 import {
   Search, Flame, Coffee, Soup,
@@ -72,7 +73,6 @@ const stats = [
   { target: 0,     suffix: "",  label: "Food Wasted" },
 ];
 
-// ── Extended testimonials (more cards = better carousel feel) ──────────────
 const testimonials = [
   {
     name: "Priya S.",
@@ -187,14 +187,12 @@ function TestimonialCarousel() {
   const prev = () => goTo(active - 1, "left");
   const next = () => goTo(active + 1, "right");
 
-  // Auto-advance every 3.5 s, pause on hover
   useEffect(() => {
     if (paused) return;
     timerRef.current = setTimeout(() => goTo(active + 1, "right"), 3500);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [active, paused]);
 
-  // Visible indices: prev, active, next (3-up on desktop)
   const indices = [
     (active - 1 + total) % total,
     active,
@@ -206,7 +204,6 @@ function TestimonialCarousel() {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      {/* Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {indices.map((idx, pos) => {
           const t = testimonials[idx];
@@ -222,7 +219,6 @@ function TestimonialCarousel() {
                 boxShadow: isCenter ? "0 8px 32px rgba(0,0,0,0.10)" : "none",
               }}
             >
-              {/* Stars */}
               <div className="flex gap-1 mb-4">
                 {Array.from({ length: t.rating }).map((_, j) => (
                   <Star key={j} className="w-4 h-4 fill-saffron text-saffron" />
@@ -245,20 +241,15 @@ function TestimonialCarousel() {
         })}
       </div>
 
-      {/* Controls row */}
       <div className="flex items-center justify-center gap-5">
-
-        {/* Prev button */}
         <button
           onClick={prev}
           aria-label="Previous"
           style={{
             width: 38, height: 38, borderRadius: "50%",
-            border: "2px solid #E0D6C2",
-            background: "white",
+            border: "2px solid #E0D6C2", background: "white",
             display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer",
-            transition: "border-color 0.15s, background 0.15s",
+            cursor: "pointer", transition: "border-color 0.15s, background 0.15s",
           }}
           onMouseEnter={e => {
             (e.currentTarget as HTMLButtonElement).style.borderColor = "hsl(var(--primary))";
@@ -272,7 +263,6 @@ function TestimonialCarousel() {
           <ChevronLeft size={16} strokeWidth={2.5} style={{ color: "hsl(var(--primary))" }} />
         </button>
 
-        {/* Dot indicators */}
         <div className="flex gap-2">
           {testimonials.map((_, i) => (
             <button
@@ -280,32 +270,24 @@ function TestimonialCarousel() {
               onClick={() => goTo(i, i > active ? "right" : "left")}
               aria-label={`Go to testimonial ${i + 1}`}
               style={{
-                width:  i === active ? 22 : 8,
-                height: 8,
-                borderRadius: 99,
-                border: "none",
-                background: i === active
-                  ? "hsl(var(--primary))"
-                  : "hsl(var(--primary) / 0.25)",
-                cursor: "pointer",
-                padding: 0,
+                width: i === active ? 22 : 8, height: 8,
+                borderRadius: 99, border: "none",
+                background: i === active ? "hsl(var(--primary))" : "hsl(var(--primary) / 0.25)",
+                cursor: "pointer", padding: 0,
                 transition: "width 0.3s ease, background 0.3s ease",
               }}
             />
           ))}
         </div>
 
-        {/* Next button */}
         <button
           onClick={next}
           aria-label="Next"
           style={{
             width: 38, height: 38, borderRadius: "50%",
-            border: "2px solid #E0D6C2",
-            background: "white",
+            border: "2px solid #E0D6C2", background: "white",
             display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer",
-            transition: "border-color 0.15s, background 0.15s",
+            cursor: "pointer", transition: "border-color 0.15s, background 0.15s",
           }}
           onMouseEnter={e => {
             (e.currentTarget as HTMLButtonElement).style.borderColor = "hsl(var(--primary))";
@@ -320,11 +302,8 @@ function TestimonialCarousel() {
         </button>
       </div>
 
-      {/* Pause indicator */}
       {paused && (
-        <p className="text-center text-xs text-muted-foreground mt-3 tracking-wide">
-          Paused
-        </p>
+        <p className="text-center text-xs text-muted-foreground mt-3 tracking-wide">Paused</p>
       )}
     </div>
   );
@@ -409,6 +388,8 @@ const Index = () => {
 
         {/* ── HERO ── */}
         <section className="sunburst-bg relative overflow-hidden py-20 md:py-32 flex-shrink-0">
+          {/* CHANGE 2: FloatingEmojis restored — now uses classy SVG line art instead of emojis */}
+          <FloatingEmojis />
           <div className="container mx-auto px-4 relative z-10 text-center">
             <div className="inline-block bg-primary text-primary-foreground text-xs font-bold px-4 py-2 rounded-full mb-6 tracking-widest">
               INDIA'S SMARTEST RECIPE FINDER
@@ -569,9 +550,7 @@ const Index = () => {
           </div>
         </section>
 
-        {/* ── TESTIMONIALS — auto-scroll carousel ── */}
-        {/* CHANGE: Replaced static 3-column grid with TestimonialCarousel component.
-            Auto-advances every 3.5s, pauses on hover, has prev/next buttons and dot indicators. */}
+        {/* ── TESTIMONIALS ── */}
         <section className="py-20 bg-background" id="testimonials">
           <div className="container mx-auto px-4">
             <div className="text-center mb-14">
@@ -585,6 +564,7 @@ const Index = () => {
         {/* ── FINAL CTA ── */}
         {!isLoggedIn && (
           <section className="py-20 sunburst-bg relative overflow-hidden">
+            <FloatingEmojis />
             <div className="container mx-auto px-4 text-center relative z-10">
               <h2 className="font-display text-4xl md:text-6xl text-primary mb-4">READY TO COOK?</h2>
               <p className="text-muted-foreground max-w-md mx-auto mb-8 text-lg">
@@ -633,4 +613,5 @@ const Index = () => {
     </>
   );
 };
+
 export default Index;
