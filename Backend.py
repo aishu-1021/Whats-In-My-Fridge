@@ -797,7 +797,10 @@ def delete_account():
     finally:
         conn.close()
 
-
+# ── Keep alive ping endpoint ─────────────────────────────────────────────────
+@app.route("/ping", methods=["GET"])
+def ping():
+    return jsonify({"status": "alive", "message": "pinging..."}), 200
 # -------------------------------------------------------
 # Run the server
 # -------------------------------------------------------
