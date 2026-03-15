@@ -18,9 +18,10 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 bcrypt = Bcrypt(app)
 
-API_KEY = "bbfae80527924e32b258b731450d894b"
-BASE_URL = "https://api.spoonacular.com"
-SECRET_KEY = "whats_in_my_fridge_secret_2026"
+# ── All secrets loaded from .env ─────────────────────────────────────────────
+API_KEY    = os.environ.get("SPOONACULAR_API_KEY", "")
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "whats_in_my_fridge_secret_2026")
+BASE_URL   = "https://api.spoonacular.com"
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "fridge.db")
 
@@ -235,7 +236,7 @@ def send_otp_email(to_email: str, otp: str):
 
 @app.route("/auth/register", methods=["POST"])
 def register():
-    data = request.get_json()
+    data     = request.get_json()
     username = data.get("username", "").strip()
     email    = data.get("email", "").strip().lower()
     password = data.get("password", "")
@@ -784,11 +785,11 @@ def delete_account():
 
     conn = get_db()
     try:
-        conn.execute("DELETE FROM pantry       WHERE user_id = ?", (user_id,))
-        conn.execute("DELETE FROM profile      WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM pantry        WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM profile       WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM saved_recipes WHERE user_id = ?", (user_id,))
-        conn.execute("DELETE FROM bazaar       WHERE user_id = ?", (user_id,))
-        conn.execute("DELETE FROM users        WHERE id = ?",      (user_id,))
+        conn.execute("DELETE FROM bazaar        WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM users         WHERE id = ?",      (user_id,))
         conn.commit()
         return jsonify({"message": "Account deleted successfully"})
     except Exception as e:
