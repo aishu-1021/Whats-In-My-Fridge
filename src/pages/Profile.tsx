@@ -16,7 +16,7 @@ const Profile = () => {
   const handleDeleteAccount = async () => {
     if (!window.confirm("Are you sure? This will permanently delete your account and all your data.")) return;
     try {
-      await fetch("http://localhost:5000/auth/delete-account", {
+      await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:5000"}/auth/delete-account`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` },
       });
