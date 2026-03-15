@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 import requests
@@ -7,9 +7,15 @@ import json
 import os
 import jwt
 import datetime
+import random
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 bcrypt = Bcrypt(app)
 
 API_KEY = "bbfae80527924e32b258b731450d894b"
@@ -20,10 +26,8 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "fridge.db")
 
 VEGETARIAN_EXCLUDE = "egg,eggs,chicken,beef,pork,lamb,fish,shrimp,mutton,turkey,bacon,sausage,prawn,crab,lobster,tuna,salmon,ham,meat,steak,mince,keema"
 
-# ── Cuisine filter ───────────────────────────────────────────────────────────
 INDIAN_CUISINES = "indian"
 
-# ── Western dish keywords to filter out from results ────────────────────────
 WESTERN_TITLE_EXCLUDE = [
     "french fries", "vichyssoise", "sauerkraut", "penne", "spaghetti",
     "pasta", "pizza", "lasagna", "risotto", "quiche", "frittata",
@@ -38,10 +42,27 @@ WESTERN_TITLE_EXCLUDE = [
     "bacon", "ham", "prosciutto", "salami", "pepperoni",
 ]
 
+# ── Gmail config ─────────────────────────────────────────────────────────────
+GMAIL_USER         = "noreply.whatsinmyfridge@gmail.com"
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+
 def is_western(title: str) -> bool:
-    """Returns True if the recipe title contains any western keyword."""
     title_lower = title.lower()
     return any(keyword in title_lower for keyword in WESTERN_TITLE_EXCLUDE)
+
+
+# -------------------------------------------------------
+# CORS PREFLIGHT HANDLER
+# -------------------------------------------------------
+
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        res = Response()
+        res.headers["Access-Control-Allow-Origin"]  = "*"
+        res.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        res.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+        return res
 
 
 # -------------------------------------------------------
@@ -128,6 +149,16 @@ def init_db():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS otp_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            otp TEXT NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            used INTEGER DEFAULT 0
+        )
+    """)
+
     conn.commit()
     conn.close()
     print("✅ Database initialised at:", DB_PATH)
@@ -150,6 +181,55 @@ def get_current_user():
 
 
 # -------------------------------------------------------
+# EMAIL HELPER
+# -------------------------------------------------------
+
+def send_otp_email(to_email: str, otp: str):
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Your What's In My Fridge? Password Reset OTP"
+    msg["From"]    = GMAIL_USER
+    msg["To"]      = to_email
+
+    html = f"""
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;
+                background:#fff8f0;border-radius:16px;border:2px solid #f5e0d0;">
+      <div style="background:#c0392b;border-radius:12px;padding:20px;text-align:center;margin-bottom:24px;">
+        <h1 style="color:white;font-size:22px;margin:0;letter-spacing:1px;">
+          WHAT'S IN MY FRIDGE?
+        </h1>
+        <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:13px;">
+          Password Reset Request
+        </p>
+      </div>
+      <p style="color:#333;font-size:15px;margin-bottom:8px;">
+        Hey Chef! 👋 Use the OTP below to reset your password.
+      </p>
+      <p style="color:#666;font-size:13px;margin-bottom:24px;">
+        This code expires in <strong>10 minutes</strong>.
+        If you didn't request this, ignore this email.
+      </p>
+      <div style="background:#c0392b;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px;">
+        <p style="color:rgba(255,255,255,0.8);font-size:12px;margin:0 0 8px;letter-spacing:2px;">
+          YOUR OTP CODE
+        </p>
+        <h2 style="color:white;font-size:42px;letter-spacing:12px;margin:0;font-weight:900;">
+          {otp}
+        </h2>
+      </div>
+      <p style="color:#999;font-size:12px;text-align:center;">
+        Made with ❤️ in Bangalore, India
+      </p>
+    </div>
+    """
+
+    msg.attach(MIMEText(html, "html"))
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+        server.sendmail(GMAIL_USER, to_email, msg.as_string())
+
+
+# -------------------------------------------------------
 # AUTH ROUTES
 # -------------------------------------------------------
 
@@ -157,7 +237,7 @@ def get_current_user():
 def register():
     data = request.get_json()
     username = data.get("username", "").strip()
-    email = data.get("email", "").strip().lower()
+    email    = data.get("email", "").strip().lower()
     password = data.get("password", "")
 
     if not username or not email or not password:
@@ -182,14 +262,14 @@ def register():
 
         token = jwt.encode({
             "user_id": user_id,
-            "email": email,
-            "exp": datetime.datetime.utcnow() + datetime.timedelta(days=30)
+            "email":   email,
+            "exp":     datetime.datetime.utcnow() + datetime.timedelta(days=30)
         }, SECRET_KEY, algorithm="HS256")
 
         return jsonify({
             "message": "Account created!",
-            "token": token,
-            "user": {"id": user_id, "username": username, "email": email}
+            "token":   token,
+            "user":    {"id": user_id, "username": username, "email": email}
         }), 201
 
     except sqlite3.IntegrityError:
@@ -200,8 +280,8 @@ def register():
 
 @app.route("/auth/login", methods=["POST"])
 def login():
-    data = request.get_json()
-    email = data.get("email", "").strip().lower()
+    data     = request.get_json()
+    email    = data.get("email", "").strip().lower()
     password = data.get("password", "")
 
     if not email or not password:
@@ -216,14 +296,14 @@ def login():
 
     token = jwt.encode({
         "user_id": user["id"],
-        "email": user["email"],
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=30)
+        "email":   user["email"],
+        "exp":     datetime.datetime.utcnow() + datetime.timedelta(days=30)
     }, SECRET_KEY, algorithm="HS256")
 
     return jsonify({
         "message": "Login successful!",
-        "token": token,
-        "user": {"id": user["id"], "username": user["username"], "email": user["email"]}
+        "token":   token,
+        "user":    {"id": user["id"], "username": user["username"], "email": user["email"]}
     })
 
 
@@ -243,14 +323,124 @@ def get_me():
 
 
 # -------------------------------------------------------
+# FORGOT PASSWORD — OTP ROUTES
+# -------------------------------------------------------
+
+@app.route("/auth/forgot-password", methods=["POST"])
+def forgot_password():
+    data  = request.get_json()
+    email = data.get("email", "").strip().lower()
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    conn = get_db()
+    user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    conn.close()
+
+    if not user:
+        return jsonify({"message": "If this email exists, an OTP has been sent."}), 200
+
+    otp        = str(random.randint(100000, 999999))
+    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+
+    conn = get_db()
+    conn.execute("DELETE FROM otp_codes WHERE email = ?", (email,))
+    conn.execute(
+        "INSERT INTO otp_codes (email, otp, expires_at) VALUES (?, ?, ?)",
+        (email, otp, expires_at)
+    )
+    conn.commit()
+    conn.close()
+
+    try:
+        send_otp_email(email, otp)
+    except Exception as e:
+        print("Email error:", e)
+        return jsonify({"error": "Failed to send OTP email. Please try again."}), 500
+
+    return jsonify({"message": "OTP sent successfully!"}), 200
+
+
+@app.route("/auth/verify-otp", methods=["POST"])
+def verify_otp():
+    data  = request.get_json()
+    email = data.get("email", "").strip().lower()
+    otp   = data.get("otp", "").strip()
+
+    if not email or not otp:
+        return jsonify({"error": "Email and OTP are required"}), 400
+
+    conn   = get_db()
+    record = conn.execute(
+        "SELECT * FROM otp_codes WHERE email = ? AND used = 0 ORDER BY id DESC LIMIT 1",
+        (email,)
+    ).fetchone()
+    conn.close()
+
+    if not record:
+        return jsonify({"error": "No OTP found for this email."}), 400
+
+    try:
+        expires_at = datetime.datetime.strptime(record["expires_at"], "%Y-%m-%d %H:%M:%S.%f")
+    except ValueError:
+        expires_at = datetime.datetime.strptime(record["expires_at"], "%Y-%m-%d %H:%M:%S")
+
+    if datetime.datetime.utcnow() > expires_at:
+        return jsonify({"error": "OTP has expired. Please request a new one."}), 400
+
+    if record["otp"] != otp:
+        return jsonify({"error": "Incorrect OTP. Please try again."}), 400
+
+    conn = get_db()
+    conn.execute("UPDATE otp_codes SET used = 1 WHERE id = ?", (record["id"],))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": "OTP verified!"}), 200
+
+
+@app.route("/auth/reset-password", methods=["POST"])
+def reset_password():
+    data     = request.get_json()
+    email    = data.get("email", "").strip().lower()
+    otp      = data.get("otp", "").strip()
+    password = data.get("password", "")
+
+    if not email or not otp or not password:
+        return jsonify({"error": "All fields are required"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters"}), 400
+
+    conn   = get_db()
+    record = conn.execute(
+        "SELECT * FROM otp_codes WHERE email = ? AND otp = ? AND used = 1 ORDER BY id DESC LIMIT 1",
+        (email, otp)
+    ).fetchone()
+    conn.close()
+
+    if not record:
+        return jsonify({"error": "Invalid or unverified OTP."}), 400
+
+    hashed = bcrypt.generate_password_hash(password).decode("utf-8")
+    conn   = get_db()
+    conn.execute("UPDATE users SET password = ? WHERE email = ?", (hashed, email))
+    conn.execute("DELETE FROM otp_codes WHERE email = ?", (email,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": "Password reset successfully!"}), 200
+
+
+# -------------------------------------------------------
 # RECIPE ROUTES
 # -------------------------------------------------------
 
 @app.route("/recipes", methods=["GET"])
 def get_recipes():
     ingredients = request.args.get("ingredients", "")
-    number = int(request.args.get("number", 20))
-    diet = request.args.get("diet", "")
+    number      = int(request.args.get("number", 20))
+    diet        = request.args.get("diet", "")
 
     if not ingredients:
         return jsonify({"error": "No ingredients provided"}), 400
@@ -281,7 +471,7 @@ def get_recipes():
         })
         if response.status_code == 200:
             results = response.json().get("results", [])
-            shaped = [
+            shaped  = [
                 {
                     "id":                    r["id"],
                     "title":                 r["title"],
@@ -291,13 +481,12 @@ def get_recipes():
                     "missedIngredients":     r.get("missedIngredients", []),
                 }
                 for r in results
-                if not is_western(r["title"])  # ✅ filter western titles
+                if not is_western(r["title"])
             ]
             return jsonify(shaped)
         else:
             return jsonify({"error": "Failed to fetch vegetarian recipes"}), 500
 
-    # ── Default search ───────────────────────────────────────────────────────
     response = requests.get(f"{BASE_URL}/recipes/complexSearch", params={
         "apiKey":               API_KEY,
         "includeIngredients":   all_ingredients,
@@ -311,7 +500,7 @@ def get_recipes():
 
     if response.status_code == 200:
         results = response.json().get("results", [])
-        shaped = [
+        shaped  = [
             {
                 "id":                    r["id"],
                 "title":                 r["title"],
@@ -321,7 +510,7 @@ def get_recipes():
                 "missedIngredients":     r.get("missedIngredients", []),
             }
             for r in results
-            if not is_western(r["title"])  # ✅ filter western titles
+            if not is_western(r["title"])
         ]
         return jsonify(shaped)
     else:
@@ -331,7 +520,7 @@ def get_recipes():
 @app.route("/recipes/<int:recipe_id>", methods=["GET"])
 def get_recipe_details(recipe_id):
     response = requests.get(f"{BASE_URL}/recipes/{recipe_id}/information", params={
-        "apiKey": API_KEY,
+        "apiKey":           API_KEY,
         "includeNutrition": False
     })
     if response.status_code == 200:
@@ -360,9 +549,9 @@ def save_pantry():
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    data = request.get_json()
+    data        = request.get_json()
     ingredients = data.get("ingredients", [])
-    conn = get_db()
+    conn        = get_db()
     conn.execute("DELETE FROM pantry WHERE user_id = ?", (user_id,))
     for ingredient in ingredients:
         if ingredient.strip():
@@ -386,7 +575,7 @@ def get_profile():
         return jsonify({"error": "Unauthorized"}), 401
 
     conn = get_db()
-    row = conn.execute("SELECT * FROM profile WHERE user_id = ?", (user_id,)).fetchone()
+    row  = conn.execute("SELECT * FROM profile WHERE user_id = ?", (user_id,)).fetchone()
     conn.close()
 
     if row:
@@ -435,14 +624,14 @@ def save_profile():
     """, (
         user_id,
         data.get("username", "Chef Foodie"),
-        data.get("handle", "@cheffoodie"),
-        data.get("bio", ""),
-        data.get("avatar", ""),
-        int(data.get("is_vegetarian", False)),
-        int(data.get("is_vegan", False)),
-        int(data.get("is_gluten_free", False)),
+        data.get("handle",   "@cheffoodie"),
+        data.get("bio",      ""),
+        data.get("avatar",   ""),
+        int(data.get("is_vegetarian",     False)),
+        int(data.get("is_vegan",          False)),
+        int(data.get("is_gluten_free",    False)),
         int(data.get("is_non_vegetarian", True)),
-        data.get("spice_level", 3),
+        data.get("spice_level",   3),
         json.dumps(data.get("cuisine_moods", []))
     ))
     conn.commit()
@@ -492,7 +681,8 @@ def save_recipe():
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             user_id, data["id"], data["title"], data.get("image", ""),
-            data.get("usedIngredientCount", 0), data.get("missedIngredientCount", 0),
+            data.get("usedIngredientCount",  0),
+            data.get("missedIngredientCount", 0),
             json.dumps(data.get("missedIngredients", []))
         ))
         conn.commit()
@@ -542,9 +732,9 @@ def add_to_bazaar():
     if not user_id:
         return jsonify({"error": "Unauthorized"}), 401
 
-    data = request.get_json()
+    data        = request.get_json()
     ingredients = data.get("ingredients", [])
-    conn = get_db()
+    conn        = get_db()
     for ingredient in ingredients:
         name = ingredient if isinstance(ingredient, str) else ingredient.get("name", "")
         if name.strip():
@@ -594,17 +784,18 @@ def delete_account():
 
     conn = get_db()
     try:
-        conn.execute("DELETE FROM pantry WHERE user_id = ?", (user_id,))
-        conn.execute("DELETE FROM profile WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM pantry       WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM profile      WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM saved_recipes WHERE user_id = ?", (user_id,))
-        conn.execute("DELETE FROM bazaar WHERE user_id = ?", (user_id,))
-        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.execute("DELETE FROM bazaar       WHERE user_id = ?", (user_id,))
+        conn.execute("DELETE FROM users        WHERE id = ?",      (user_id,))
         conn.commit()
         return jsonify({"message": "Account deleted successfully"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
+
 
 # -------------------------------------------------------
 # Run the server
