@@ -4,7 +4,6 @@ import { Refrigerator, Menu, X, LogOut } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "@/contexts/AppContext";
 
-// Shown when user is NOT logged in (landing page navigation)
 const guestLinks = [
   { label: "HOME", path: "/" },
   { label: "HOW IT WORKS", path: "/#how-it-works" },
@@ -13,7 +12,6 @@ const guestLinks = [
   { label: "CONTACT", path: "/contact" },
 ];
 
-// Shown when user IS logged in (app navigation)
 const appLinks = [
   { label: "HOME", path: "/" },
   { label: "RECIPES", path: "/results" },
@@ -22,6 +20,11 @@ const appLinks = [
   { label: "PANTRY", path: "/pantry" },
   { label: "PROFILE", path: "/profile" },
 ];
+
+const getFirstName = (fullName?: string) => {
+  if (!fullName) return "";
+  return fullName.trim().split(" ")[0];
+};
 
 const Navbar = () => {
   const location = useLocation();
@@ -36,7 +39,6 @@ const Navbar = () => {
     navigate("/");
   };
 
-  // Handle smooth scroll for anchor links like /#how-it-works
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, path: string) => {
     if (path.startsWith("/#")) {
       e.preventDefault();
@@ -59,7 +61,6 @@ const Navbar = () => {
     <nav className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b-4 border-primary">
       <div className="container mx-auto flex items-center justify-between py-3 px-4">
 
-        {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
           <Refrigerator className="w-8 h-8 text-primary" />
           <span className="font-display text-xl text-primary tracking-wide">
@@ -67,7 +68,6 @@ const Navbar = () => {
           </span>
         </Link>
 
-        {/* Desktop nav links */}
         <div className="hidden md:flex items-center gap-6">
           {navLinks.map((link) => (
             <a
@@ -83,12 +83,11 @@ const Navbar = () => {
           ))}
         </div>
 
-        {/* Desktop auth buttons */}
         <div className="hidden md:flex items-center gap-3">
           {isLoggedIn ? (
             <>
               <span className="font-bold text-sm text-primary">
-                👋 {user?.username}
+                {getFirstName(user?.username)}
               </span>
               <Button
                 variant="nav"
@@ -116,13 +115,11 @@ const Navbar = () => {
           )}
         </div>
 
-        {/* Mobile toggle */}
         <button className="md:hidden" onClick={() => setMobileOpen(!mobileOpen)}>
           {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
       </div>
 
-      {/* Mobile menu */}
       {mobileOpen && (
         <div className="md:hidden bg-background border-t border-border px-4 pb-4">
           {navLinks.map((link) => (
@@ -138,7 +135,9 @@ const Navbar = () => {
 
           {isLoggedIn ? (
             <div className="mt-2">
-              <p className="text-sm font-bold text-primary mb-2">{user?.username}</p>
+              <p className="text-sm font-bold text-primary mb-2">
+                {getFirstName(user?.username)}
+              </p>
               <Button
                 variant="nav"
                 size="sm"
