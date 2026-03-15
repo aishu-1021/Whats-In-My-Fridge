@@ -9,7 +9,7 @@ import { User, ThumbsUp, X, Camera, Pencil } from "lucide-react";
 const cuisineOptions = ["North Indian", "South Indian", "Street Food", "Indo-Chinese", "Healthy Fits", "Desserts"];
 
 const Profile = () => {
-  const { savedRecipes, pantryItems, profile, saveProfile, user, logout, token } = useApp();
+  const { savedRecipes, pantryItems, bazaarList, profile, saveProfile, user, logout, token } = useApp();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -42,7 +42,7 @@ const Profile = () => {
   const [editName,      setEditName]      = useState("");
   const [editHandle,    setEditHandle]    = useState("");
   const [editBio,       setEditBio]       = useState("");
-  const [editAvatar,    setEditAvatar]    = useState<string>("");   // base64 preview
+  const [editAvatar,    setEditAvatar]    = useState<string>("");
   const [avatarSaving,  setAvatarSaving]  = useState(false);
 
   useEffect(() => {
@@ -60,12 +60,9 @@ const Profile = () => {
     }
   }, [profile]);
 
-  // ── Handle file pick ──────────────────────────────────────────────────────
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // Validate: images only, max 2 MB
     if (!file.type.startsWith("image/")) {
       alert("Please select an image file.");
       return;
@@ -74,7 +71,6 @@ const Profile = () => {
       alert("Image must be smaller than 2 MB.");
       return;
     }
-
     const reader = new FileReader();
     reader.onload = (ev) => {
       setEditAvatar(ev.target?.result as string);
@@ -89,7 +85,6 @@ const Profile = () => {
     setCuisineMoods(updated);
   };
 
-  // ── Save taste preferences (existing flow) ────────────────────────────────
   const handleSave = async () => {
     await saveProfile({
       username:          profile?.username  || "Chef Foodie",
@@ -106,14 +101,13 @@ const Profile = () => {
     setShowModal(true);
   };
 
-  // ── Save edit profile modal ───────────────────────────────────────────────
   const handleEditSave = async () => {
     setAvatarSaving(true);
     await saveProfile({
       username:          editName,
       handle:            editHandle,
       bio:               editBio,
-      avatar:            editAvatar,        // base64 stored in DB / returned on load
+      avatar:            editAvatar,
       is_vegetarian:     vegToggle,
       is_non_vegetarian: nonVegToggle,
       is_vegan:          veganToggle,
@@ -126,13 +120,11 @@ const Profile = () => {
     setShowModal(true);
   };
 
-  // The avatar to show on the profile page (saved) or the edit modal (preview)
   const displayAvatar = profile?.avatar || "";
 
   return (
     <>
       <style>{`
-        /* ── Edit modal ── */
         .ep-overlay {
           position: fixed; inset: 0; z-index: 50;
           background: rgba(0,0,0,0.45);
@@ -176,7 +168,6 @@ const Profile = () => {
         }
         .ep-close:hover { background: rgba(255,255,255,0.35); }
 
-        /* Avatar upload area */
         .ep-avatar-section {
           display: flex; flex-direction: column; align-items: center;
           padding: 24px 24px 0; gap: 10px;
@@ -210,7 +201,6 @@ const Profile = () => {
           font-size: 11.5px; color: #999; font-weight: 600; letter-spacing: 0.3px;
         }
 
-        /* Fields */
         .ep-body {
           padding: 20px 24px 8px;
           display: flex; flex-direction: column; gap: 14px;
@@ -231,7 +221,6 @@ const Profile = () => {
         }
         .ep-textarea { resize: none; height: 80px; }
 
-        /* Actions */
         .ep-actions {
           display: flex; gap: 10px; padding: 16px 24px 24px;
         }
@@ -256,7 +245,6 @@ const Profile = () => {
           background: hsl(var(--primary) / 0.88); transform: scale(1.02);
         }
 
-        /* Edit trigger pill */
         .ep-trigger {
           background: none; border: 1.5px solid hsl(var(--primary) / 0.4);
           border-radius: 50px; padding: 4px 14px;
@@ -271,7 +259,6 @@ const Profile = () => {
           border-color: hsl(var(--primary));
         }
 
-        /* Profile page avatar */
         .profile-avatar-wrap {
           width: 96px; height: 96px; border-radius: 50%;
           overflow: hidden; margin: 0 auto 12px;
@@ -319,15 +306,15 @@ const Profile = () => {
             <div className="grid grid-cols-3 gap-4 mb-8">
               <div className="bg-card border-2 border-border rounded-2xl p-4 text-center">
                 <p className="font-display text-3xl text-primary">{savedRecipes.length}</p>
-                <p className="text-xs text-muted-foreground font-bold">Recipes Tried</p>
+                <p className="text-xs text-muted-foreground font-bold">Recipes Saved</p>
               </div>
               <div className="bg-card border-2 border-border rounded-2xl p-4 text-center">
                 <p className="font-display text-3xl text-primary">{pantryItems.length}</p>
-                <p className="text-xs text-muted-foreground font-bold">Ingredients Saved</p>
+                <p className="text-xs text-muted-foreground font-bold">Pantry Items</p>
               </div>
               <div className="bg-card border-2 border-border rounded-2xl p-4 text-center">
-                <p className="font-display text-3xl text-primary">{savedRecipes.length}</p>
-                <p className="text-xs text-muted-foreground font-bold">Bookmarked</p>
+                <p className="font-display text-3xl text-primary">{bazaarList.length}</p>
+                <p className="text-xs text-muted-foreground font-bold">Bazaar Items</p>
               </div>
             </div>
 
@@ -419,7 +406,6 @@ const Profile = () => {
           <div className="ep-overlay" onClick={() => setShowEditModal(false)}>
             <div className="ep-modal" onClick={(e) => e.stopPropagation()}>
 
-              {/* Header */}
               <div className="ep-header">
                 <span className="ep-header-title">EDIT PROFILE</span>
                 <button className="ep-close" onClick={() => setShowEditModal(false)}>
@@ -427,9 +413,7 @@ const Profile = () => {
                 </button>
               </div>
 
-              {/* Avatar upload */}
               <div className="ep-avatar-section">
-                {/* Hidden file input */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -455,7 +439,6 @@ const Profile = () => {
                 <p className="ep-avatar-hint">Click photo to change · Max 2 MB</p>
               </div>
 
-              {/* Fields */}
               <div className="ep-body">
                 <div>
                   <p className="ep-field-label">Full Name</p>
@@ -486,7 +469,6 @@ const Profile = () => {
                 </div>
               </div>
 
-              {/* Actions */}
               <div className="ep-actions">
                 <button className="ep-btn-cancel" onClick={() => setShowEditModal(false)}>
                   Cancel
