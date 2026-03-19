@@ -8,9 +8,7 @@ import os
 import jwt
 import datetime
 import random
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import resend
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -22,6 +20,9 @@ bcrypt = Bcrypt(app)
 API_KEY    = os.environ.get("SPOONACULAR_API_KEY", "")
 SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "whats_in_my_fridge_secret_2026")
 BASE_URL   = "https://api.spoonacular.com"
+
+# ── Resend config ─────────────────────────────────────────────────────────────
+resend.api_key = os.environ.get("RESEND_API_KEY", "")
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "fridge.db")
 
@@ -42,10 +43,6 @@ WESTERN_TITLE_EXCLUDE = [
     "chowder", "bisque", "bouillabaisse", "coq au vin", "beef bourguignon",
     "bacon", "ham", "prosciutto", "salami", "pepperoni",
 ]
-
-# ── Gmail config ─────────────────────────────────────────────────────────────
-GMAIL_USER         = "noreply.whatsinmyfridge@gmail.com"
-GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 
 def is_western(title: str) -> bool:
     title_lower = title.lower()
@@ -182,52 +179,52 @@ def get_current_user():
 
 
 # -------------------------------------------------------
-# EMAIL HELPER
+# EMAIL HELPER — using Resend
 # -------------------------------------------------------
 
 def send_otp_email(to_email: str, otp: str):
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Your What's In My Fridge? Password Reset OTP"
-    msg["From"]    = GMAIL_USER
-    msg["To"]      = to_email
-
-    html = f"""
-    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;
-                background:#fff8f0;border-radius:16px;border:2px solid #f5e0d0;">
-      <div style="background:#c0392b;border-radius:12px;padding:20px;text-align:center;margin-bottom:24px;">
-        <h1 style="color:white;font-size:22px;margin:0;letter-spacing:1px;">
-          WHAT'S IN MY FRIDGE?
-        </h1>
-        <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:13px;">
-          Password Reset Request
-        </p>
-      </div>
-      <p style="color:#333;font-size:15px;margin-bottom:8px;">
-        Hey Chef! 👋 Use the OTP below to reset your password.
-      </p>
-      <p style="color:#666;font-size:13px;margin-bottom:24px;">
-        This code expires in <strong>10 minutes</strong>.
-        If you didn't request this, ignore this email.
-      </p>
-      <div style="background:#c0392b;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px;">
-        <p style="color:rgba(255,255,255,0.8);font-size:12px;margin:0 0 8px;letter-spacing:2px;">
-          YOUR OTP CODE
-        </p>
-        <h2 style="color:white;font-size:42px;letter-spacing:12px;margin:0;font-weight:900;">
-          {otp}
-        </h2>
-      </div>
-      <p style="color:#999;font-size:12px;text-align:center;">
-        Made with ❤️ in Bangalore, India
-      </p>
-    </div>
-    """
-
-    msg.attach(MIMEText(html, "html"))
-
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
-        server.sendmail(GMAIL_USER, to_email, msg.as_string())
+    params = {
+        "from": "onboarding@resend.dev",
+        "to":   [to_email],
+        "subject": "Your What's In My Fridge? OTP Code",
+        "html": f"""
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;
+                    background:#fff8f0;border-radius:16px;border:2px solid #f5e0d0;">
+          <div style="background:#c0392b;border-radius:12px;padding:20px;
+                      text-align:center;margin-bottom:24px;">
+            <h1 style="color:white;font-size:22px;margin:0;letter-spacing:1px;">
+              WHAT'S IN MY FRIDGE?
+            </h1>
+            <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:13px;">
+              Password Reset Request
+            </p>
+          </div>
+          <p style="color:#333;font-size:15px;margin-bottom:8px;">
+            Hey Chef!  Use the OTP below to reset your password.
+          </p>
+          <p style="color:#666;font-size:13px;margin-bottom:24px;">
+            This code expires in <strong>10 minutes</strong>.
+            If you didn't request this, ignore this email.
+          </p>
+          <div style="background:#c0392b;border-radius:12px;padding:24px;
+                      text-align:center;margin-bottom:24px;">
+            <p style="color:rgba(255,255,255,0.8);font-size:12px;
+                      margin:0 0 8px;letter-spacing:2px;">
+              YOUR OTP CODE
+            </p>
+            <h2 style="color:white;font-size:42px;letter-spacing:12px;
+                       margin:0;font-weight:900;">
+              {otp}
+            </h2>
+          </div>
+          <p style="color:#999;font-size:12px;text-align:center;">
+            Made with ❤️ in Bangalore, India
+          </p>
+        </div>
+        """,
+    }
+    resend.Emails.send(params)
+    print(f" OTP email sent to {to_email}")
 
 
 # -------------------------------------------------------
@@ -357,7 +354,7 @@ def forgot_password():
     try:
         send_otp_email(email, otp)
     except Exception as e:
-        print("Email error:", e)
+        print(f"Email error: {type(e).__name__}: {e}")
         return jsonify({"error": "Failed to send OTP email. Please try again."}), 500
 
     return jsonify({"message": "OTP sent successfully!"}), 200
@@ -797,10 +794,13 @@ def delete_account():
     finally:
         conn.close()
 
-# ── Keep alive ping endpoint ─────────────────────────────────────────────────
+
+# ── Keep alive ping endpoint ──────────────────────────────────────────────────
 @app.route("/ping", methods=["GET"])
 def ping():
     return jsonify({"status": "alive", "message": "pinging..."}), 200
+
+
 # -------------------------------------------------------
 # Run the server
 # -------------------------------------------------------

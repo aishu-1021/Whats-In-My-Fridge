@@ -4,3 +4,4 @@ flask-bcrypt
 pyjwt
 requests
 python-dotenv
+resend
