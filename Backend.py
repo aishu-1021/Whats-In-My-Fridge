@@ -800,6 +800,26 @@ def delete_account():
 def ping():
     return jsonify({"status": "alive", "message": "pinging..."}), 200
 
+@app.route("/test-email", methods=["GET"])
+def test_email():
+    try:
+        import resend
+        resend.api_key = os.environ.get("RESEND_API_KEY", "")
+        print(f"Resend API key: {resend.api_key[:10]}...")
+        params = {
+            "from": "onboarding@resend.dev",
+            "to": ["aishwarya.aiyandra@gmail.com"],
+            "subject": "Test from Fridge App",
+            "html": "<h1>Test email!</h1>",
+        }
+        result = resend.Emails.send(params)
+        print(f"✅ Email sent: {result}")
+        return jsonify({"success": True, "result": str(result)}), 200
+    except Exception as e:
+        import traceback
+        error = traceback.format_exc()
+        print(f"❌ Error: {error}")
+        return jsonify({"error": str(e), "traceback": error}), 500
 
 # -------------------------------------------------------
 # Run the server
