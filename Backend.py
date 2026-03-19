@@ -200,7 +200,7 @@ def send_otp_email(to_email: str, otp: str):
             </p>
           </div>
           <p style="color:#333;font-size:15px;margin-bottom:8px;">
-            Hey Chef!  Use the OTP below to reset your password.
+            Hey Chef! Use the OTP below to reset your password.
           </p>
           <p style="color:#666;font-size:13px;margin-bottom:24px;">
             This code expires in <strong>10 minutes</strong>.
@@ -218,13 +218,13 @@ def send_otp_email(to_email: str, otp: str):
             </h2>
           </div>
           <p style="color:#999;font-size:12px;text-align:center;">
-            Made with ❤️ in Bangalore, India
+            Made with love in Bangalore, India
           </p>
         </div>
         """,
     }
     resend.Emails.send(params)
-    print(f" OTP email sent to {to_email}")
+    print(f"✅ OTP email sent to {to_email}")
 
 
 # -------------------------------------------------------
@@ -354,7 +354,9 @@ def forgot_password():
     try:
         send_otp_email(email, otp)
     except Exception as e:
-        print(f"Email error: {type(e).__name__}: {e}")
+        import traceback
+        print(f"❌ Email error: {type(e).__name__}: {e}")
+        traceback.print_exc()
         return jsonify({"error": "Failed to send OTP email. Please try again."}), 500
 
     return jsonify({"message": "OTP sent successfully!"}), 200
@@ -795,24 +797,17 @@ def delete_account():
         conn.close()
 
 
-# ── Keep alive ping endpoint ──────────────────────────────────────────────────
-@app.route("/ping", methods=["GET"])
-def ping():
-    return jsonify({"status": "alive", "message": "pinging..."}), 200
-
+# ── Test email endpoint ───────────────────────────────────────────────────────
 @app.route("/test-email", methods=["GET"])
 def test_email():
     try:
-        import resend
-        resend.api_key = os.environ.get("RESEND_API_KEY", "")
-        print(f"Resend API key: {resend.api_key[:10]}...")
-        params = {
+        print(f"RESEND_API_KEY starts with: {resend.api_key[:10] if resend.api_key else 'EMPTY!'}")
+        result = resend.Emails.send({
             "from": "onboarding@resend.dev",
-            "to": ["aishwarya.aiyandra@gmail.com"],
+            "to":   ["aishwarya.aiyandra@gmail.com"],
             "subject": "Test from Fridge App",
-            "html": "<h1>Test email!</h1>",
-        }
-        result = resend.Emails.send(params)
+            "html": "<h1>It works!</h1>",
+        })
         print(f"✅ Email sent: {result}")
         return jsonify({"success": True, "result": str(result)}), 200
     except Exception as e:
@@ -820,6 +815,13 @@ def test_email():
         error = traceback.format_exc()
         print(f"❌ Error: {error}")
         return jsonify({"error": str(e), "traceback": error}), 500
+
+
+# ── Keep alive ping endpoint ──────────────────────────────────────────────────
+@app.route("/ping", methods=["GET"])
+def ping():
+    return jsonify({"status": "alive", "message": "pinging..."}), 200
+
 
 # -------------------------------------------------------
 # Run the server
