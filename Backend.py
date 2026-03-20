@@ -28,8 +28,6 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "fridge.db")
 
 VEGETARIAN_EXCLUDE = "egg,eggs,chicken,beef,pork,lamb,fish,shrimp,mutton,turkey,bacon,sausage,prawn,crab,lobster,tuna,salmon,ham,meat,steak,mince,keema"
 
-INDIAN_CUISINES = "indian"
-
 WESTERN_TITLE_EXCLUDE = [
     "french fries", "vichyssoise", "sauerkraut", "penne", "spaghetti",
     "pasta", "pizza", "lasagna", "risotto", "quiche", "frittata",
@@ -457,13 +455,13 @@ def get_recipes():
     if pantry_ingredients:
         all_ingredients = all_ingredients + "," + ",".join(pantry_ingredients)
 
+    # ── Vegetarian search uses complexSearch with diet filter ────────────────
     if diet == "vegetarian":
         response = requests.get(f"{BASE_URL}/recipes/complexSearch", params={
             "apiKey":               API_KEY,
             "includeIngredients":   all_ingredients,
             "excludeIngredients":   VEGETARIAN_EXCLUDE,
             "diet":                 "vegetarian",
-            "cuisine":              INDIAN_CUISINES,
             "number":               min(number, 50),
             "addRecipeInformation": False,
             "fillIngredients":      True,
@@ -487,19 +485,17 @@ def get_recipes():
         else:
             return jsonify({"error": "Failed to fetch vegetarian recipes"}), 500
 
-    response = requests.get(f"{BASE_URL}/recipes/complexSearch", params={
-        "apiKey":               API_KEY,
-        "includeIngredients":   all_ingredients,
-        "cuisine":              INDIAN_CUISINES,
-        "number":               min(number, 50),
-        "addRecipeInformation": False,
-        "fillIngredients":      True,
-        "ranking":              2,
-        "ignorePantry":         True,
+    # ── Default search uses findByIngredients (more results, no cuisine filter)
+    response = requests.get(f"{BASE_URL}/recipes/findByIngredients", params={
+        "apiKey":       API_KEY,
+        "ingredients":  all_ingredients,
+        "number":       min(number, 50),
+        "ranking":      2,
+        "ignorePantry": True,
     })
 
     if response.status_code == 200:
-        results = response.json().get("results", [])
+        results = response.json()
         shaped  = [
             {
                 "id":                    r["id"],
