@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_BASE = "https://whats-in-my-fridge-3yn4.onrender.com";
 
 // -------------------------------------------------------
 // TYPES
